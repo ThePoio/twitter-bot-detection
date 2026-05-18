@@ -2,7 +2,7 @@ import pandas as pd
 from pipeline_data import process_df
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
@@ -18,7 +18,7 @@ from sklearn.metrics import (
 )
 
 df = pd.read_csv(
-    r"C:\Users\yaelz\proyectom\twitter-bot-detection\bot_detection_data.csv"
+    r".data/bot_detection_data.csv"
 )
 
 df = process_df(df)
@@ -31,17 +31,34 @@ X = df[[
     "Mention Count",
     "Follower Count",
     "account_age_days",
-    "username_digits",
     "has_hashtags",
     "tweet_length",
-    "url_count"
+    "Verified",
+    "key_words"
 ]]
 
-X = X.fillna("")
+X = X.copy()
+X["Tweet"] = X["Tweet"].fillna("")
+numeric_columns = [
+    "Retweet Count",
+    "Mention Count",
+    "Follower Count",
+    "account_age_days",
+    "has_hashtags",
+    "tweet_length",
+    "Verified",
+    "key_words"
+]
+X[numeric_columns] = X[numeric_columns].fillna(0)
 
 pre = ColumnTransformer(
     transformers=[
-        ("tweet", TfidfVectorizer(max_features=3000), "Tweet")
+        ("tweet", TfidfVectorizer(
+            max_features=5000,
+            ngram_range=(1, 2),
+            min_df=2,
+            sublinear_tf=True
+        ), "Tweet")
     ],
     remainder="passthrough"
 )
@@ -57,7 +74,11 @@ X_train, X_test, y_train, y_test = train_test_split(
 # ===== SVM =====
 svm = Pipeline([
     ("pre", pre),
-    ("clf", SVC(kernel="rbf", C=10))
+    ("clf", SVC(
+        kernel="linear",
+        C=2,
+        class_weight="balanced"
+    ))
 ])
 
 svm.fit(X_train,y_train)
@@ -77,8 +98,14 @@ print(classification_report(y_test,pred_svm))
 rf = Pipeline([
     ("pre", pre),
     ("clf", RandomForestClassifier(
-        n_estimators=300,
-        random_state=42
+        n_estimators=500,
+        random_state=42,
+        max_depth=24,
+        min_samples_split=4,
+        min_samples_leaf=2,
+        max_features="sqrt",
+        class_weight="balanced_subsample",
+        n_jobs=-1
     ))
 ])
 

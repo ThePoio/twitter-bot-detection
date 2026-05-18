@@ -3,10 +3,9 @@
 This module provides a `process_df` function that adds the following features:
 
 - `account_age_days`: integer days between `Created At` and reference date (default: now)
-- `username_digits`: count of numeric characters in `Username`
 - `has_hashtags`: 1 if `Hashtags` contains any non-empty value, else 0
 - `tweet_length`: number of characters in `Tweet`
-- `url_count`: number of URLs found in `Tweet`
+- `key_words`: 1 if `Tweet` contains bot-like keywords, else 0
 
 Usage example:
     df = pd.read_csv('.data/bot_detection_data.csv')
@@ -20,7 +19,10 @@ import pandas as pd
 import numpy as np
 
 
-URL_REGEX = re.compile(r"https?://\S+|www\.\S+", flags=re.IGNORECASE)
+KEY_WORDS = re.compile(
+    r"\b(?:human|student|computer|resource|skin|hear|lay|spend|finish|find|far|behavior|beat|whole|building|throw|week|concern|hope|enter|opportunity|letter|happy)\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _parse_datetime(series: pd.Series) -> pd.Series:
@@ -34,11 +36,6 @@ def account_age_days(created_at: pd.Series, reference: datetime | None = None) -
     delta = ref - created
     # where created is NaT, result should be NaN
     return delta.dt.days.astype('float')
-
-
-def username_digits(username: pd.Series) -> pd.Series:
-    """Count digit characters in the username."""
-    return username.fillna('').astype(str).apply(lambda s: sum(c.isdigit() for c in s)).astype(int)
 
 
 def has_hashtags(hashtags: pd.Series) -> pd.Series:
@@ -58,8 +55,9 @@ def tweet_length(tweet: pd.Series) -> pd.Series:
     return tweet.fillna('').astype(str).apply(len).astype(int)
 
 
-def url_count(tweet: pd.Series) -> pd.Series:
-    return tweet.fillna('').astype(str).apply(lambda s: len(URL_REGEX.findall(s))).astype(int)
+def key_words(tweet: pd.Series) -> pd.Series:
+    """Return 1 if the tweet contains bot-like keywords, else 0."""
+    return tweet.fillna('').astype(str).apply(lambda s: int(bool(KEY_WORDS.search(s)))).astype(int)
 
 
 def process_df(df: pd.DataFrame, reference: datetime | None = None) -> pd.DataFrame:
@@ -75,25 +73,23 @@ def process_df(df: pd.DataFrame, reference: datetime | None = None) -> pd.DataFr
     else:
         out['account_age_days'] = np.nan
 
-    # Username -> username_digits
-    if 'Username' in out.columns:
-        out['username_digits'] = username_digits(out['Username'])
-    else:
-        out['username_digits'] = 0
-
     # Hashtags -> has_hashtags
     if 'Hashtags' in out.columns:
         out['has_hashtags'] = has_hashtags(out['Hashtags'])
     else:
         out['has_hashtags'] = 0
 
-    # Tweet -> tweet_length, url_count
+    # Tweet -> tweet_length, key_words
     if 'Tweet' in out.columns:
         out['tweet_length'] = tweet_length(out['Tweet'])
-        out['url_count'] = url_count(out['Tweet'])
+        out['key_words'] = key_words(out['Tweet'])
     else:
         out['tweet_length'] = 0
-        out['url_count'] = 0
+        out['key_words'] = 0
+
+    # Preserve the verification flag using the source dataset's original column name.
+    if 'Verified' not in out.columns and 'verified' in out.columns:
+        out['Verified'] = out['verified']
 
     return out
 
